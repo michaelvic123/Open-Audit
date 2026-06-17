@@ -20,6 +20,7 @@ import type { TranslatedEvent, RawEvent } from "@/lib/translator/types";
 interface EventFeedTableProps {
   events: TranslatedEvent[];
   isLoading?: boolean;
+  newEventIds?: Set<string>;
 }
 
 function StatusBadge({ status }: { status: TranslatedEvent["status"] }): React.JSX.Element {
@@ -66,6 +67,7 @@ function SkeletonRow(): React.JSX.Element {
 export function EventFeedTable({
   events,
   isLoading = false,
+  newEventIds = new Set(),
 }: EventFeedTableProps): React.JSX.Element {
   const [rawDialogEvent, setRawDialogEvent] = useState<RawEvent | null>(null);
   const [contributeDialogEvent, setContributeDialogEvent] = useState<RawEvent | null>(null);
@@ -100,7 +102,10 @@ export function EventFeedTable({
                   const isTranslated = event.status === "translated";
 
                   return (
-                    <TableRow key={event.raw.id} className="group">
+                    <TableRow
+                      key={event.raw.id}
+                      className={`group transition-colors ${newEventIds.has(event.raw.id) ? "animate-slide-in bg-violet-50/60 dark:bg-violet-950/30" : ""}`}
+                    >
                       {/* Status */}
                       <TableCell>
                         <StatusBadge status={event.status} />

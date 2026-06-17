@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { AlertCircle, BookOpen, ArrowRight } from "lucide-react";
+import { AlertCircle, BookOpen, ArrowRight, Radio, PauseCircle, PlayCircle } from "lucide-react";
 import { SearchBar } from "@/components/dashboard/SearchBar";
 import { EventFeedTable } from "@/components/dashboard/EventFeedTable";
 import { StatsBar } from "@/components/dashboard/StatsBar";
 import { translateEvents } from "@/lib/translator/registry";
 import { getMockEventsForContract, MOCK_RAW_EVENTS } from "@/lib/mock-data";
+import { useLiveFeed } from "@/lib/hooks/useLiveFeed";
+import { Button } from "@/components/ui/button";
 import type { TranslatedEvent } from "@/lib/translator/types";
 
 /** Simulates a network delay for realistic UX. */
@@ -23,6 +25,12 @@ export function DashboardClient(): React.JSX.Element {
   const [isLoading, setIsLoading] = useState(false);
   const [searchedContract, setSearchedContract] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleNewEvent = useCallback((event: TranslatedEvent) => {
+    setEvents((prev) => [event, ...prev]);
+  }, []);
+
+  const { isLive, isPaused, newEventIds, toggleLive, togglePause } = useLiveFeed(handleNewEvent);
 
   const handleSearch = useCallback(async function (contractId: string): Promise<void> {
     if (!contractId) {
@@ -96,11 +104,43 @@ export function DashboardClient(): React.JSX.Element {
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
             Event Feed
           </h2>
-          <span className="text-xs text-muted-foreground">
-            {isLoading ? "Loading..." : `${events.length} events`}
-          </span>
+          <div className="flex items-center gap-2">
+            {isLive && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={togglePause}
+                aria-label={isPaused ? "Resume feed" : "Pause feed"}
+              >
+                {isPaused ? (
+                  <>
+                    <PlayCircle className="h-3.5 w-3.5 mr-1 text-green-500" />
+                    Resume
+                  </>
+                ) : (
+                  <>
+                    <PauseCircle className="h-3.5 w-3.5 mr-1 text-amber-500" />
+                    Pause
+                  </>
+                )}
+              </Button>
+            )}
+            <Button
+              variant={isLive ? "destructive" : "outline"}
+              size="sm"
+              className={`h-7 px-3 text-xs ${!isLive ? "border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950" : ""}`}
+              onClick={toggleLive}
+            >
+              <Radio className={`h-3.5 w-3.5 mr-1.5 ${isLive ? "animate-pulse" : ""}`} />
+              {isLive ? "Stop Live" : "Live Feed"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {isLoading ? "Loading..." : `${events.length} events`}
+            </span>
+          </div>
         </div>
-        <EventFeedTable events={events} isLoading={isLoading} />
+        <EventFeedTable events={events} isLoading={isLoading} newEventIds={newEventIds} />
       </section>
 
       {/* Contributor CTA */}

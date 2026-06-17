@@ -27,24 +27,39 @@ type BlueprintRegistry = Map<string, TranslationBlueprint>;
 function buildRegistry(): BlueprintRegistry {
   const registry: BlueprintRegistry = new Map();
 
-  const allBlueprints: TranslationBlueprint[] = [
-    // Stellar Asset Contract — Transfer events
-    ...createAllSacBlueprints(),
-
-    // Stellar Asset Contract — Mint/Burn events
-    createSacMintBurnBlueprint("CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"),
-    createSacMintBurnBlueprint("CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"),
-    createSacMintBurnBlueprint("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"),
-    createSacMintBurnBlueprint("CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"),
-
-    // TODO: Add Soroswap Router blueprint (see good-first-issues.json GFI-003)
-    // TODO: Add Blend Protocol blueprint
-    // TODO: Add Phoenix DEX blueprint
-  ];
-
-  for (const blueprint of allBlueprints) {
+  // Stellar Asset Contract — Transfer events
+  // Note: These must come AFTER mint/burn to take precedence (Map overwrites)
+  // Or we need a unified blueprint that handles all SAC event types
+  for (const blueprint of createAllSacBlueprints()) {
     registry.set(blueprint.contractId, blueprint);
   }
+
+  // Stellar Asset Contract — Mint/Burn events
+  // Register mint/burn handlers - they check event type internally
+  const mintBurnContracts = [
+    "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+    "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  ];
+  for (const contractId of mintBurnContracts) {
+    const mintBurnBlueprint = createSacMintBurnBlueprint(contractId);
+    const existing = registry.get(contractId);
+    if (existing) {
+      // Merge by creating a combined translate function
+      const originalTranslate = existing.translate;
+      registry.set(contractId, {
+        ...mintBurnBlueprint,
+        translate: (event) => originalTranslate(event) ?? mintBurnBlueprint.translate(event),
+      });
+    } else {
+      registry.set(contractId, mintBurnBlueprint);
+    }
+  }
+
+  // TODO: Add Soroswap Router blueprint (see good-first-issues.json GFI-003)
+  // TODO: Add Blend Protocol blueprint
+  // TODO: Add Phoenix DEX blueprint
 
   return registry;
 }

@@ -16,6 +16,7 @@ import {
 } from "@/lib/translator/custom-abi";
 import { getMockEventsForContract, MOCK_RAW_EVENTS } from "@/lib/mock-data";
 import { useLiveFeed } from "@/lib/hooks/useLiveFeed";
+import { useUrlSync } from "@/lib/hooks/useUrlSync";
 import type { TranslatedEvent, RawEvent, CustomAbi } from "@/lib/translator/types";
 
 /** Simulates a network delay for realistic UX. */
@@ -33,6 +34,13 @@ export function DashboardClient(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [events, setEvents] = useState<TranslatedEvent[]>([]);
+
+  const { get: getParam, setParams } = useUrlSync();
+  // Captured once so the SearchBar input shows the deep-linked value on first
+  // paint, before the hydration effect fires the actual fetch.
+  const [initialContractParam] = useState(function () {
+    return getParam("contract");
+  });
 
   // Load previously uploaded ABIs from localStorage after mount. Doing this in
   // an effect (rather than during render) keeps the server and client output
@@ -64,29 +72,46 @@ export function DashboardClient(): React.JSX.Element {
 
   const { isLive, isPaused, newEventIds, toggleLive, togglePause } = useLiveFeed(handleNewEvent);
 
-  const handleSearch = useCallback(async function (contractId: string): Promise<void> {
-    if (!contractId) {
-      setRawEvents(MOCK_RAW_EVENTS);
-      setSearchedContract(null);
+  const handleSearch = useCallback(
+    async function (contractId: string): Promise<void> {
+      setParams({ contract: contractId || null });
+
+      if (!contractId) {
+        setRawEvents(MOCK_RAW_EVENTS);
+        setSearchedContract(null);
+        setError(null);
+        return;
+      }
+
+      setIsLoading(true);
       setError(null);
-      return;
-    }
 
-    setIsLoading(true);
-    setError(null);
+      try {
+        // Simulate fetching from Stellar network
+        await simulateNetworkDelay(800);
 
-    try {
-      // Simulate fetching from Stellar network
-      await simulateNetworkDelay(800);
+        setRawEvents(getMockEventsForContract(contractId));
+        setSearchedContract(contractId);
+      } catch {
+        setError("Failed to fetch events. Please check the Contract ID and try again.");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [setParams]
+  );
 
-      setRawEvents(getMockEventsForContract(contractId));
-      setSearchedContract(contractId);
-    } catch {
-      setError("Failed to fetch events. Please check the Contract ID and try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // Hydrate top-level search from ?contract= on mount so deep links work.
+  // Runs once; further URL changes from inside the app are driven by handleSearch.
+  useEffect(
+    function () {
+      if (initialContractParam) {
+        void handleSearch(initialContractParam);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const handleAbiUpload = useCallback(function (abi: CustomAbi): void {
     setCustomAbis(saveCustomAbi(abi));
@@ -106,7 +131,11 @@ export function DashboardClient(): React.JSX.Element {
     <div className="space-y-6">
       {/* Search */}
       <section aria-label="Contract search">
-        <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+        <SearchBar
+          onSearch={handleSearch}
+          isLoading={isLoading}
+          defaultValue={initialContractParam}
+        />
       </section>
 
       {/* Error state */}

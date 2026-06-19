@@ -19,7 +19,14 @@
 
 import { createAllSacBlueprints } from "./blueprints/sac-transfer";
 import { createSacMintBurnBlueprint } from "./blueprints/sac-mint-burn";
-import type { RawEvent, TranslatedEvent, VersionedTranslationBlueprint } from "./types";
+import { decodeEventName } from "./decode";
+import type {
+  EventMatchCriteria,
+  RawEvent,
+  TranslatedEvent,
+  TranslationBlueprint,
+  Language,
+} from "./types";
 
 /**
  * The registry maps contract IDs to an array of versioned blueprints,
@@ -34,38 +41,39 @@ type BlueprintRegistry = Map<string, VersionedTranslationBlueprint[]>;
 function buildRegistry(): BlueprintRegistry {
   const registry: BlueprintRegistry = new Map();
 
-  const allBlueprints: VersionedTranslationBlueprint[] = [
-    // Stellar Asset Contract — Transfer events
-    ...createAllSacBlueprints(),
+  // Stellar Asset Contract — Transfer events
+  // Note: These must come AFTER mint/burn to take precedence (Map overwrites)
+  // Or we need a unified blueprint that handles all SAC event types
+  for (const blueprint of createAllSacBlueprints()) {
+    registry.set(blueprint.contractId, blueprint);
+  }
 
-    // Stellar Asset Contract — Mint/Burn events
-    createSacMintBurnBlueprint("CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"),
-    createSacMintBurnBlueprint("CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"),
-    createSacMintBurnBlueprint("CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"),
-    createSacMintBurnBlueprint("CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"),
-
-    // TODO: Add Soroswap Router blueprint (see good-first-issues.json GFI-003)
-    // TODO: Add Blend Protocol blueprint
-    // TODO: Add Phoenix DEX blueprint
+  // Stellar Asset Contract — Mint/Burn events
+  // Register mint/burn handlers - they check event type internally
+  const mintBurnContracts = [
+    "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA",
+    "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+    "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
   ];
-
-  for (const blueprint of allBlueprints) {
-    const existing = registry.get(blueprint.contractId) ?? [];
-    existing.push(blueprint);
-    registry.set(blueprint.contractId, existing);
+  for (const contractId of mintBurnContracts) {
+    const mintBurnBlueprint = createSacMintBurnBlueprint(contractId);
+    const existing = registry.get(contractId);
+    if (existing) {
+      // Merge by creating a combined translate function
+      const originalTranslate = existing.translate;
+      registry.set(contractId, {
+        ...mintBurnBlueprint,
+        translate: (event, lang) => originalTranslate(event, lang) ?? mintBurnBlueprint.translate(event, lang),
+      });
+    } else {
+      registry.set(contractId, mintBurnBlueprint);
+    }
   }
 
-  // Sort each contract's blueprints descending by validFromLedger so the
-  // engine can find the applicable version with a simple linear scan.
-  for (const [contractId, blueprints] of Array.from(registry.entries())) {
-    registry.set(
-      contractId,
-      blueprints.sort(
-        (a: VersionedTranslationBlueprint, b: VersionedTranslationBlueprint) =>
-          (b.validFromLedger ?? 0) - (a.validFromLedger ?? 0)
-      )
-    );
-  }
+  // TODO: Add Soroswap Router blueprint (see good-first-issues.json GFI-003)
+  // TODO: Add Blend Protocol blueprint
+  // TODO: Add Phoenix DEX blueprint
 
   return registry;
 }
@@ -95,50 +103,62 @@ function resolveBlueprint(
 /**
  * Translates a single raw Soroban event into a human-readable TranslatedEvent.
  *
- * Looks up the contract ID in the registry, selects the schema version that
- * matches the event's ledger, and calls its translate() function. If no
- * blueprint is found or the blueprint returns null, the event is marked as
- * "cryptic".
+ * Lookup order:
+ *   1. The caller-supplied `customBlueprints` map (e.g. user-uploaded ABIs from
+ *      localStorage). These take precedence so developers can translate their
+ *      own contracts before they are merged into the global registry.
+ *   2. The global REGISTRY of community blueprints.
+ *
+ * If neither produces a translation, the event is marked as "cryptic".
  */
-export function translateEvent(event: RawEvent): TranslatedEvent {
-  const blueprints = REGISTRY.get(event.contractId);
-
-  if (!blueprints) {
-    return {
-      raw: event,
-      description: null,
-      status: "cryptic",
-      blueprintName: null,
-      eventType: null,
-      schemaVersion: null,
-    };
+export function translateEvent(
+  event: RawEvent,
+  customBlueprints?: Map<string, TranslationBlueprint>,
+  lang: Language = "en"
+): TranslatedEvent {
+  // 1. Custom (local) blueprints win when they can translate the event.
+  const custom = customBlueprints?.get(event.contractId);
+  if (custom) {
+    const translated = applyBlueprint(event, custom, lang);
+    if (translated) return translated;
   }
 
-  const blueprint = resolveBlueprint(blueprints, event.ledger);
+  // 2. Fall back to the global community registry.
+  const blueprint = REGISTRY.get(event.contractId);
 
   if (!blueprint) {
     return {
       raw: event,
       description: null,
       status: "cryptic",
-      blueprintName: null,
+      // Surface the custom contract name (if any) so the UI still has context.
+      blueprintName: custom?.contractName ?? null,
       eventType: null,
       schemaVersion: null,
     };
   }
 
-  const result = blueprint.translate(event);
+  const translated = applyBlueprint(event, blueprint, lang);
+  if (translated) return translated;
 
-  if (!result) {
-    return {
-      raw: event,
-      description: null,
-      status: "cryptic",
-      blueprintName: blueprint.contractName,
-      eventType: null,
-      schemaVersion: blueprint.version ?? null,
-    };
-  }
+  return {
+    raw: event,
+    description: null,
+    status: "cryptic",
+    blueprintName: blueprint.contractName,
+    eventType: null,
+  };
+}
+
+/**
+ * Runs a single blueprint against an event, returning a translated event or
+ * null when the blueprint cannot handle it.
+ */
+function applyBlueprint(event: RawEvent, blueprint: TranslationBlueprint, lang: Language): TranslatedEvent | null {
+  if (blueprint.matches && !blueprint.matches(event)) return null;
+
+  const result = blueprint.translate(event, lang);
+  if (!result) return null;
 
   return {
     raw: event,
@@ -151,13 +171,58 @@ export function translateEvent(event: RawEvent): TranslatedEvent {
 }
 
 /**
+ * Returns true when an event satisfies every requested criterion.
+ * Useful for blueprints that must match more than the event signature topic.
+ */
+export function matchesEventCriteria(
+  event: RawEvent,
+  criteria: EventMatchCriteria
+): boolean {
+  if (criteria.contractId && event.contractId !== criteria.contractId) {
+    return false;
+  }
+
+  for (const topicCriteria of criteria.topics ?? []) {
+    const topic = event.topics[topicCriteria.index];
+    if (typeof topic !== "string") return false;
+
+    if (topicCriteria.equals && topic !== topicCriteria.equals) {
+      return false;
+    }
+
+    if (
+      topicCriteria.includes &&
+      !topic.toLowerCase().includes(topicCriteria.includes.toLowerCase())
+    ) {
+      return false;
+    }
+
+    if (
+      topicCriteria.decodedName &&
+      decodeEventName(topic) !== topicCriteria.decodedName
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Translates a batch of raw events.
  * Preserves order and handles errors per-event gracefully.
+ *
+ * @param customBlueprints Optional per-session blueprints (e.g. uploaded ABIs)
+ *   that are consulted before the global registry.
  */
-export function translateEvents(events: RawEvent[]): TranslatedEvent[] {
+export function translateEvents(
+  events: RawEvent[],
+  customBlueprints?: Map<string, TranslationBlueprint>,
+  lang: Language = "en"
+): TranslatedEvent[] {
   return events.map(function (event: RawEvent): TranslatedEvent {
     try {
-      return translateEvent(event);
+      return translateEvent(event, customBlueprints, lang);
     } catch {
       return {
         raw: event,

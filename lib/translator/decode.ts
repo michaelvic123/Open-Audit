@@ -2,6 +2,11 @@
  * Hex decoding utilities for Soroban event data.
  *
  * Soroban events encode their topics and data as XDR (External Data Representation).
+ * These helpers decode XDR-encoded values into human-readable formats.
+ */
+
+import { xdr, Address } from "stellar-sdk";
+import type { DecodedAddress, DecodedAmount } from "./types";
  * These helpers provide simplified decoding for common patterns.
  *
  * Supported ScVal Types:
@@ -28,6 +33,7 @@ import type {
 const STROOP_DIVISOR = BigInt(10_000_000);
 
 /**
+ * Shortens a Stellar address for display.
  * Validates that a string is a valid hex string (optionally with 0x prefix).
  * Returns true if valid, false otherwise.
  */
@@ -66,6 +72,7 @@ export function escapeHtml(text: string): string {
 /**
  * Shortens a Stellar public key for display.
  * e.g. "GABC...WXYZ1234" → "GABC...1234"
+ * e.g. "CDLZ...YSC" → "CDLZ...YSC"
  */
 export function shortenAddress(publicKey: string): string {
   if (publicKey.length <= 12) return publicKey;
@@ -73,10 +80,17 @@ export function shortenAddress(publicKey: string): string {
 }
 
 /**
- * Decodes a mock hex-encoded Stellar address.
- * In production this would use stellar-sdk XDR decoding.
+ * Decodes a hex-encoded ScVal address into a canonical Stellar address string.
+ *
+ * Uses the Stellar SDK to parse the XDR and detect the address type:
+ * - Account addresses (ed25519 public keys) are encoded as G... strings
+ * - Contract addresses (contract ID hashes) are encoded as C... strings
  */
 export function decodeAddress(hex: string): DecodedAddress {
+  try {
+    const hexStr = hex.startsWith("0x") ? hex.slice(2) : hex;
+    const buffer = Buffer.from(hexStr, "hex");
+    const scVal = xdr.ScVal.fromXDR(buffer);
   // Validate and sanitize hex input
   const sanitizedHex = sanitizeHex(hex);
   if (!sanitizedHex) {
@@ -92,10 +106,26 @@ export function decodeAddress(hex: string): DecodedAddress {
   const tail = sanitizedHex.slice(-4).toUpperCase();
   const publicKey = `G${seed}${"A".repeat(48 - seed.length)}${tail}`;
 
-  return {
-    publicKey,
-    short: shortenAddress(publicKey),
-  };
+    if (scVal.switch().name !== "scvAddress") {
+      return {
+        publicKey: "Unknown",
+        short: "????",
+      };
+    }
+
+    const address = Address.fromScVal(scVal);
+    const publicKey = address.toString();
+
+    return {
+      publicKey,
+      short: shortenAddress(publicKey),
+    };
+  } catch {
+    return {
+      publicKey: "Invalid",
+      short: "????",
+    };
+  }
 }
 
 /**
@@ -140,14 +170,10 @@ export function decodeEventName(topicHex: string): string {
 
   // Mock: map known topic hashes to event names for demo purposes.
   const knownTopics: Record<string, string> = {
-    "0x0000000000000000000000000000000000000000000000000000000074726e73":
-      "transfer",
-    "0x000000000000000000000000000000000000000000000000000000006d696e74":
-      "mint",
-    "0x000000000000000000000000000000000000000000000000000000006275726e":
-      "burn",
-    "0x000000000000000000000000000000000000000000000000000000006170707276":
-      "approve",
+    "0x0000000000000000000000000000000000000000000000000000000074726e73": "transfer",
+    "0x000000000000000000000000000000000000000000000000000000006d696e74": "mint",
+    "0x000000000000000000000000000000000000000000000000000000006275726e": "burn",
+    "0x000000000000000000000000000000000000000000000000000000006170707276": "approve",
   };
 
   return knownTopics[sanitizedHex] ?? "unknown";

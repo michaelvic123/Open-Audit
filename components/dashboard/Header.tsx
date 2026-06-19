@@ -32,7 +32,7 @@ export function Header(): React.JSX.Element {
           </div>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav aria-label="Main navigation" className="hidden md:flex items-center gap-1">
             <Button variant="ghost" size="sm" asChild>
               <a href="/dashboard">Dashboard</a>
             </Button>
@@ -75,7 +75,7 @@ export function Header(): React.JSX.Element {
 
         {/* Mobile nav dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t py-3 space-y-1">
+          <nav aria-label="Mobile navigation" className="md:hidden border-t py-3 space-y-1">
             <Button variant="ghost" size="sm" className="w-full justify-start" asChild>
               <a href="/dashboard" onClick={toggleMobileMenu}>
                 Dashboard
@@ -102,7 +102,7 @@ export function Header(): React.JSX.Element {
                 Contribute
               </a>
             </Button>
-          </div>
+          </nav>
         )}
       </div>
     </header>

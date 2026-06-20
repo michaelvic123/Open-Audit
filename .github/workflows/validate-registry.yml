@@ -25,5 +25,4 @@ jobs:
 
       - run: npm ci
 
-      - run: npx ts-node scripts/validate-registry.ts
       - run: node scripts/validate-registry.js

@@ -1,18 +1,7 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
-import {
-  AlertCircle,
-  BookOpen,
-  ArrowRight,
-  Radio,
-  PauseCircle,
-  PlayCircle,
-  Upload,
-  FileJson,
-  Trash2,
-  Download,
-} from "lucide-react";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { AlertCircle, BookOpen, ArrowRight, Radio, PauseCircle, PlayCircle, Upload, FileJson, Trash2 } from "lucide-react";
 import { SearchBar } from "@/components/dashboard/SearchBar";
 import { EventFeedTable } from "@/components/dashboard/EventFeedTable";
 import { StatsBar } from "@/components/dashboard/StatsBar";
@@ -28,7 +17,8 @@ import {
   removeCustomAbi,
   saveCustomAbi,
 } from "@/lib/translator/custom-abi";
-import { translateEvents } from "@/lib/translator/registry";
+import { getMockEventsForContract, MOCK_RAW_EVENTS } from "@/lib/mock-data";
+import { useLiveFeed } from "@/lib/hooks/useLiveFeed";
 import type { TranslatedEvent, RawEvent, CustomAbi } from "@/lib/translator/types";
 
 /** Simulates a network delay for realistic UX. */
@@ -68,12 +58,9 @@ export function DashboardClient(): React.JSX.Element {
     [rawEvents, customBlueprints, language]
   );
 
-  const allEvents = useMemo(
-    function () {
-      return [...liveEvents, ...translatedEvents];
-    },
-    [liveEvents, translatedEvents]
-  );
+  const handleNewEvent = useCallback((event: TranslatedEvent) => {
+    setRawEvents((prev) => [event.raw, ...prev]);
+  }, []);
 
   const filteredEvents = useMemo(
     function () {
@@ -173,7 +160,8 @@ export function DashboardClient(): React.JSX.Element {
               setSearchValue("");
               handleSearch("");
             }}
-            className="text-xs text-violet-600 hover:underline dark:text-violet-400"
+            className="text-violet-600 dark:text-violet-400 hover:underline text-xs"
+            aria-label="Clear contract filter"
           >
             Clear all filters
           </button>
@@ -270,6 +258,7 @@ export function DashboardClient(): React.JSX.Element {
                   : ""
               }`}
               onClick={toggleLive}
+              aria-label={isLive ? "Stop live feed" : "Start live feed"}
             >
               <Radio className={`mr-1.5 h-3.5 w-3.5 ${isLive ? "animate-pulse" : ""}`} />
               {isLive ? "Stop Live" : "Live Feed"}

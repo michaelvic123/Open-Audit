@@ -286,7 +286,7 @@ export function startEventIndexer(options: IndexerOptions): IndexerControls {
         if (response.latestLedger) {
           cursor = {
             lastLedger: response.latestLedger,
-
+            paginationCursor: (response as unknown as Record<string, unknown>).cursor as string | undefined,
           };
           console.log(`[indexer] Cursor updated to ledger ${cursor.lastLedger}`);
         }

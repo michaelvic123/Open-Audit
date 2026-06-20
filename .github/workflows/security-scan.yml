@@ -22,13 +22,13 @@ jobs:
           fetch-depth: 0
 
       - name: Run Gitleaks
-        uses: docker://gitleaks/gitleaks:v8.18.2
+        uses: zricethezav/gitleaks-action@v1
         with:
           args: detect --source . --report-format sarif --report-path gitleaks.sarif --config .gitleaks.toml
 
       - name: Upload SARIF to GitHub
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: gitleaks.sarif
           category: gitleaks
@@ -56,7 +56,7 @@ jobs:
           hide-progress: true
 
       - name: Upload Trivy SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy

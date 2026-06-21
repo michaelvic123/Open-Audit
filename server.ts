@@ -1,6 +1,7 @@
 /**
  * Custom Next.js server with an attached WebSocket server.
  * Broadcasts newly translated Soroban events to all connected clients.
+ * Bloated event data (>2KB) is automatically offloaded to IPFS before broadcast.
  *
  * Run with: npx ts-node --project tsconfig.server.json server.ts
  * (or via the `dev:ws` npm script)
@@ -90,8 +91,13 @@ app.prepare().then(async () => {
       process.env.INGESTION_STATE_FILE ?? ".open-audit/ingestion-state.json"
     ),
     coldStartLookbackLedgers: Number(process.env.INGESTION_COLD_START_LOOKBACK_LEDGERS ?? "100"),
-    onEvent: (rawEvent) => {
+    onEvent: async (rawEvent) => {
       console.log(`[Indexer] New event: ${rawEvent.id} from contract ${rawEvent.contractId}`);
+
+      const processed = await processEventForIpfs(rawEvent);
+      rawEvent.data = processed.data;
+      rawEvent.topics = processed.topics;
+
       const translated = recordTranslationDuration(rawEvent.contractId, () => translateEvent(rawEvent));
       eventsIngestedTotal.labels(rawEvent.contractId, translated.status === "translated" ? "success" : "failed").inc();
       broadcast(translated);

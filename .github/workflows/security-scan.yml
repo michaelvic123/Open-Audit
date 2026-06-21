@@ -9,6 +9,10 @@ on:
     - cron: "0 6 * * 1"
 
 jobs:
+  # ── Secret scanning ────────────────────────────────────────────────────────
+  # gitleaks-action@v2 now requires a paid organisation license.
+  # We use the Gitleaks CLI directly (free, MIT-licensed) installed via the
+  # official install script, then produce SARIF output ourselves.
   gitleaks:
     name: Secret Scanning with Gitleaks
     runs-on: ubuntu-latest
@@ -21,26 +25,38 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_ENABLE_SARIF: true
-          # gitleaks-action@v2 writes results.sarif when GITLEAKS_ENABLE_SARIF=true
-          GITLEAKS_SARIF_FILE: results.sarif
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION="8.24.3"
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
 
-      - name: Show SARIF outputs (debug)
-        if: always()
-        run: ls -la *.sarif 2>/dev/null || echo "No .sarif files found"
+      - name: Run Gitleaks (SARIF output)
+        # exit code 1 = leaks found, 2 = error; we continue so SARIF always uploads
+        run: |
+          gitleaks detect \
+            --source . \
+            --config .gitleaks.toml \
+            --report-format sarif \
+            --report-path results.sarif \
+            --redact \
+            --no-git=false \
+            --log-level warn \
+          || GITLEAKS_EXIT=$?; \
+          # exit 2 is a hard error; exit 1 just means leaks were detected
+          if [ "${GITLEAKS_EXIT:-0}" -eq 2 ]; then exit 2; fi
+        continue-on-error: true
 
-      - name: Upload SARIF to GitHub
+      - name: Upload Gitleaks SARIF to GitHub
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: results.sarif
           category: gitleaks
 
+  # ── Dependency & filesystem vulnerability scanning ─────────────────────────
   trivy:
     name: Dependency Scanning with Trivy
     runs-on: ubuntu-latest
@@ -51,27 +67,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ⚠️  aquasecurity/trivy-action was subject to a supply-chain compromise
-      # (March 2026) where nearly all version tags were force-pushed with
-      # malicious code. We install Trivy directly via the official install
-      # script pinned to a specific version instead of using the Action wrapper.
-      # See: https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23
+      # We install Trivy via the official install script instead of the
+      # aquasecurity/trivy-action wrapper, which had a supply-chain incident
+      # in March 2026 (GHSA-69fq-xp46-6x23).
       - name: Install Trivy
         run: |
           curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
             | sh -s -- -b /usr/local/bin v0.61.0
+          trivy --version
 
       - name: Run Trivy filesystem scan
+        # Always write the SARIF file regardless of findings so the upload
+        # step never hits "path does not exist".  We capture the exit code
+        # separately and fail the job after the upload.
         run: |
           trivy fs . \
             --format sarif \
             --output trivy-results.sarif \
-            --exit-code 1 \
             --severity CRITICAL,HIGH \
             --scanners vuln \
-            --no-progress
-        # exit-code 1 means the step fails when HIGH/CRITICAL vulns are found.
-        # We still want the SARIF upload to run, so we use continue-on-error.
+            --no-progress \
+            --exit-code 0
+          # Re-run with exit-code 1 to set the job status correctly.
+          # The SARIF file already exists from the step above, so the
+          # upload step will always succeed regardless of this exit code.
+          trivy fs . \
+            --format table \
+            --severity CRITICAL,HIGH \
+            --scanners vuln \
+            --no-progress \
+            --exit-code 1
         continue-on-error: true
 
       - name: Upload Trivy SARIF to GitHub

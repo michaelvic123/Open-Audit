@@ -8,9 +8,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "lint:registry": "tsx scripts/lint-registry.ts",
+    "validate:registry": "node scripts/validate-registry.js",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:resilience": "vitest run lib/resilience",
+    "test:resilience:watch": "vitest lib/resilience",
+    "test:resilience:coverage": "vitest run --coverage lib/resilience",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "ts-node prisma/seed.ts",
@@ -63,6 +68,7 @@
     "prettier": "^3.2.5",
     "tailwindcss": "^3.3.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.7.0",
     "typescript": "^5",
     "vitest": "^2.1.8"
   }

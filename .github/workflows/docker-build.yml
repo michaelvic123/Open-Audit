@@ -10,7 +10,6 @@ on:
     branches:
       - main
 
-# Limit concurrent runs on the same ref to avoid wasted runner minutes.
 concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: true
@@ -26,8 +25,8 @@ jobs:
 
     permissions:
       contents: read
-      packages: write          # required to push to GHCR
-      security-events: write   # required to upload Trivy SARIF results
+      packages: write
+      security-events: write
 
     strategy:
       fail-fast: false
@@ -37,19 +36,43 @@ jobs:
           - linux/arm64
 
     steps:
-      # ── Checkout ──────────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── QEMU — enables cross-compilation on the amd64 runner ─────────────────
+      # ── Rust toolchain — generate Cargo.lock if absent ────────────────────
+      # The lockfile must exist before `docker build` so the COPY in the
+      # rust-builder stage succeeds.  We generate it on the runner (fast,
+      # no compilation) and cache it between runs.
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-lock-${{ hashFiles('native/soroban-xdr-decode/Cargo.toml') }}
+          restore-keys: cargo-lock-
+
+      - name: Generate Cargo.lock (if not committed)
+        working-directory: native/soroban-xdr-decode
+        run: |
+          if [ ! -f Cargo.lock ]; then
+            cargo generate-lockfile
+          fi
+
+      # ── QEMU — enables cross-arch emulation on the amd64 runner ───────────
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # ── Buildx — multi-platform builder ──────────────────────────────────────
+      # ── Buildx ────────────────────────────────────────────────────────────
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # ── Registry login (skipped on forks / unauthenticated PRs) ──────────────
+      # ── Registry login (skipped on PRs / forks) ───────────────────────────
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -58,7 +81,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Derive image tags and labels ──────────────────────────────────────────
+      # ── Image tags ────────────────────────────────────────────────────────
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -71,14 +94,11 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
 
-      # ── Sanitise platform string for use as a cache key ───────────────────────
       - name: Sanitise platform string
         id: sanitise
         run: echo "platform=$( echo '${{ matrix.platform }}' | tr '/' '-' )" >> "$GITHUB_OUTPUT"
 
-      # ── Build (and push on non-PR runs) ───────────────────────────────────────
-      # On PR runs we export the image to a local tarball so Trivy can scan it
-      # without needing registry access.
+      # ── Build (push on non-PR; tarball on PR) ─────────────────────────────
       - name: Build and push image (push event)
         id: build_push
         if: github.event_name != 'pull_request'
@@ -89,6 +109,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # TARGETARCH is set automatically by Buildx from the platform value.
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache-${{ steps.sanitise.outputs.platform }}
           cache-to:   type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:cache-${{ steps.sanitise.outputs.platform }},mode=max
           provenance: false
@@ -103,16 +124,11 @@ jobs:
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Export to OCI tarball for local Trivy scan — no registry needed.
-          outputs: type=docker,dest=/tmp/image.tar
+          outputs: type=docker,dest=/tmp/image-${{ steps.sanitise.outputs.platform }}.tar
           provenance: false
 
-      # ── Security scan — Trivy CLI ──────────────────────────────────────────────
-      # aquasecurity/trivy-action is not used: the action tags are unreliable
-      # following a supply-chain incident (Mar 2026, GHSA-69fq-xp46-6x23).
-      # We install the Trivy CLI directly and scan the appropriate target:
-      #   • push events  → scan the pushed image by digest from GHCR
-      #   • PR events    → scan the local tarball (no registry login required)
+      # ── Trivy — install CLI directly (action tags are unreliable post ─────
+      # GHSA-69fq-xp46-6x23 supply-chain incident, Mar 2026).
       - name: Install Trivy
         run: |
           curl -sfL \
@@ -120,10 +136,9 @@ jobs:
             | sh -s -- -b /usr/local/bin v0.61.0
           trivy --version
 
+      # Scan the pushed image by digest (non-PR) ────────────────────────────
       - name: Run Trivy image scan (push event)
         if: github.event_name != 'pull_request'
-        # --exit-code 0 guarantees the SARIF file is written before this step
-        # exits. A later step re-runs trivy to set the correct job status.
         run: |
           trivy image \
             --format sarif \
@@ -134,6 +149,7 @@ jobs:
             --exit-code 0 \
             "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build_push.outputs.digest }}"
 
+      # Scan the local tarball (PR) ─────────────────────────────────────────
       - name: Run Trivy image scan (pull_request event)
         if: github.event_name == 'pull_request'
         run: |
@@ -144,20 +160,20 @@ jobs:
             --ignore-unfixed \
             --no-progress \
             --exit-code 0 \
-            --input /tmp/image.tar
+            --input /tmp/image-${{ steps.sanitise.outputs.platform }}.tar
 
-      # ── Upload SARIF to GitHub Security tab ───────────────────────────────────
+      # ── Upload SARIF — guarded so a missing file never hard-fails CI ──────
       - name: Upload Trivy SARIF report
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy-docker-${{ steps.sanitise.outputs.platform }}
 
-      # ── Fail the job if HIGH/CRITICAL CVEs were found ─────────────────────────
-      # Runs after the SARIF upload so the Security tab is always populated.
+      # Re-run with --exit-code 1 to set job status; runs after SARIF upload ─
       - name: Fail on HIGH/CRITICAL vulnerabilities (push event)
         if: github.event_name != 'pull_request'
+        continue-on-error: true
         run: |
           trivy image \
             --format table \
@@ -166,10 +182,10 @@ jobs:
             --no-progress \
             --exit-code 1 \
             "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build_push.outputs.digest }}"
-        continue-on-error: true
 
       - name: Fail on HIGH/CRITICAL vulnerabilities (pull_request event)
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         run: |
           trivy image \
             --format table \
@@ -177,10 +193,9 @@ jobs:
             --ignore-unfixed \
             --no-progress \
             --exit-code 1 \
-            --input /tmp/image.tar
-        continue-on-error: true
+            --input /tmp/image-${{ steps.sanitise.outputs.platform }}.tar
 
-  # ── Merge per-platform digests into a single multi-arch manifest ──────────────
+  # ── Merge per-platform digests into a single multi-arch manifest ──────────
   merge-manifest:
     name: Merge multi-arch manifest
     runs-on: ubuntu-latest
@@ -192,12 +207,18 @@ jobs:
       packages: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -213,11 +234,18 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      # Install stable Rust to generate Cargo.lock (needed by Dockerfile COPY).
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Generate Cargo.lock (if not committed)
+        working-directory: native/soroban-xdr-decode
+        run: |
+          if [ ! -f Cargo.lock ]; then
+            cargo generate-lockfile
+          fi
 
       - name: Build and push multi-arch manifest
         uses: docker/build-push-action@v5

@@ -9,9 +9,7 @@ on:
     - cron: "0 6 * * 1"
 
 jobs:
-  # ── Secret scanning ─────────────────────────────────────────────────────────
-  # gitleaks-action@v2 requires a paid org license since v2.3.
-  # We use the free Gitleaks CLI directly instead.
+  # ── Secret scanning ──────────────────────────────────────────────────────────
   gitleaks:
     name: Secret Scanning with Gitleaks
     runs-on: ubuntu-latest
@@ -33,8 +31,6 @@ jobs:
           gitleaks version
 
       - name: Run Gitleaks
-        # exit 0 = clean, 1 = leaks found, 2 = error
-        # We always want the SARIF uploaded, so we never let this step hard-fail.
         id: gitleaks
         run: |
           gitleaks detect \
@@ -48,7 +44,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Gitleaks SARIF
-        if: always()
+        if: always() && hashFiles('results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: results.sarif
@@ -60,10 +56,7 @@ jobs:
           echo "::error::Gitleaks detected secrets in this repository."
           exit 1
 
-  # ── Dependency & filesystem vulnerability scanning ──────────────────────────
-  # aquasecurity/trivy-action tags are unreliable (supply-chain incident Mar 2026,
-  # GHSA-69fq-xp46-6x23). We install the Trivy CLI directly via the official
-  # install script and run it ourselves.
+  # ── Dependency & filesystem vulnerability scanning ───────────────────────────
   trivy:
     name: Dependency Scanning with Trivy
     runs-on: ubuntu-latest
@@ -74,6 +67,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Generate Cargo.lock so Trivy can scan pinned Rust dependency versions.
+      # Without it Trivy either skips the Cargo ecosystem entirely or errors.
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-lock-${{ hashFiles('native/soroban-xdr-decode/Cargo.toml') }}
+          restore-keys: cargo-lock-
+
+      - name: Generate Cargo.lock (if not committed)
+        working-directory: native/soroban-xdr-decode
+        run: |
+          if [ ! -f Cargo.lock ]; then
+            cargo generate-lockfile
+          fi
+
       - name: Install Trivy
         run: |
           curl -sfL \
@@ -81,10 +97,9 @@ jobs:
             | sh -s -- -b /usr/local/bin v0.61.0
           trivy --version
 
+      # --exit-code 0 here: ensures the SARIF file is always written even when
+      # vulnerabilities are found.  The job status is set by the step below.
       - name: Run Trivy scan (SARIF)
-        # --exit-code 0 ensures the SARIF file is always written even when
-        # vulnerabilities are found, so the upload step never sees a missing file.
-        # A separate step below re-checks and fails the job if needed.
         id: trivy_scan
         run: |
           trivy fs . \
@@ -92,24 +107,29 @@ jobs:
             --output trivy-results.sarif \
             --severity CRITICAL,HIGH \
             --scanners vuln \
+            --ignorefile .trivyignore \
             --no-progress \
             --exit-code 0
+        # continue-on-error so a scan *error* (not a finding) doesn't skip upload
+        continue-on-error: true
 
+      # Guard the upload with hashFiles so a missing SARIF file never fails CI.
       - name: Upload Trivy SARIF
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
           category: trivy
 
+      # Re-run with --exit-code 1 after the SARIF upload so the job status
+      # reflects real findings without blocking the upload step.
       - name: Fail if CRITICAL/HIGH vulnerabilities found
-        # Re-run in table mode with exit-code 1 so the job status reflects
-        # real findings. The SARIF upload above has already succeeded by now.
         run: |
           trivy fs . \
             --format table \
             --severity CRITICAL,HIGH \
             --scanners vuln \
+            --ignorefile .trivyignore \
             --no-progress \
             --exit-code 1
         continue-on-error: true

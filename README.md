@@ -145,6 +145,46 @@ Terminal 3: npm run worker:indexer
 - **[Architecture Details](MICROSERVICES_ARCHITECTURE.md)** - Complete technical documentation
 - **[Testing Guide](MICROSERVICES_TESTING_GUIDE.md)** - Comprehensive testing walkthrough
 
+### 🔒 Security Hardening (Production-Ready)
+
+**Bulletproof XDR parser protection against malicious contract payloads:**
+
+```
+Untrusted XDR → Security Guards → Safe Parsing → Graceful Error Handling
+```
+
+**Protection Against:**
+- ✅ Stack overflow (deeply nested structures)
+- ✅ Out-of-memory attacks (large payloads)
+- ✅ Denial of service (infinite loops)
+- ✅ Malformed XDR exploitation
+
+**Security Mechanisms:**
+- Recursion depth limits (MAX=100 levels)
+- Memory allocation guards (MAX=10 MB)
+- Parsing timeout protection (MAX=5 seconds)
+- Collection size limits (MAX=10,000 elements)
+- Real-time attack detection
+
+📚 **Documentation:**
+- **[Security Hardening Guide](SECURITY_HARDENING_GUIDE.md)** - Complete security documentation
+- **[Security Summary](TASK_4_SECURITY_HARDENING_SUMMARY.md)** - Implementation overview
+
+**Quick Start:**
+```typescript
+import { secureParseScVal } from '@/lib/translator/secure-xdr-parser';
+
+const result = secureParseScVal(hex);
+if (result.success) {
+  // Use result.value safely
+}
+```
+
+**Monitoring:**
+```bash
+GET /api/security/metrics  # Security metrics API
+```
+
 ### Legacy Monolithic Architecture
 
 **Single-process system (for simple deployments):**
@@ -171,7 +211,7 @@ For new contributors wanting to understand the system's data flow and internal a
 **Quick Overview:**
 
 1. **Event Indexer** (`lib/stellar/`, `src/worker/`) — Polls Stellar RPC with resilient rate limiting
-2. **Translation Engine** (`lib/translator/`) — Converts XDR to human-readable text
+2. **Translation Engine** (`lib/translator/`) — Converts XDR to human-readable text with security hardening
 3. **Redis Pub/Sub** (microservices only) — Message broker for event distribution
 4. **WebSocket Server** (`server-decoupled.ts` or `server.ts`) — Broadcasts events in real-time
 5. **Frontend Dashboard** (`app/dashboard/`, `components/`) — Interactive UI

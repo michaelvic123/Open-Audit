@@ -65,11 +65,51 @@ Copy `.env.example` to `.env.local` and fill in the values:
 cp .env.example .env.local
 ```
 
+For microservices architecture, use:
+```bash
+cp .env.microservices.example .env.local
+```
+
 | Variable | Description | Default |
 |---|---|---|
 | `NEXT_PUBLIC_HORIZON_URL` | Stellar Horizon endpoint | `https://horizon-testnet.stellar.org` |
 | `NEXT_PUBLIC_SOROBAN_RPC_URL` | Soroban RPC endpoint | `https://soroban-testnet.stellar.org` |
 | `NEXT_PUBLIC_NETWORK_PASSPHRASE` | Network passphrase | Testnet passphrase |
+| `REDIS_URL` | Redis connection URL (microservices) | `redis://localhost:6379` |
+| `REDIS_CHANNEL` | Redis Pub/Sub channel (microservices) | `stellar:events` |
+| `PORT` | HTTP server port | `3000` |
+
+### Available Scripts
+
+**Development:**
+```bash
+npm run dev              # Standard Next.js dev server
+npm run dev:ws           # Legacy monolithic server with WebSocket
+npm run dev:decoupled    # Microservices web server (requires Redis)
+npm run worker:indexer   # Microservices indexer worker (requires Redis)
+npm run test:websocket   # Test WebSocket connection
+```
+
+**Production (Microservices):**
+```bash
+npm run docker:build     # Build Docker images
+npm run docker:up        # Start all services with Docker Compose
+npm run docker:down      # Stop all Docker services
+npm run docker:logs      # View Docker logs
+
+npm run start:pm2        # Start services with PM2
+npm run stop:pm2         # Stop PM2 services
+npm run monit:pm2        # Monitor PM2 processes
+npm run logs:pm2         # View PM2 logs
+```
+
+**Testing & Quality:**
+```bash
+npm run test             # Run all tests
+npm run lint             # Run ESLint
+npm run lint:registry    # Validate translation registry
+npm run format           # Format code with Prettier
+```
 
 ---
 
@@ -90,11 +130,57 @@ The default Jaeger endpoint is `http://localhost:14268/api/traces`.
 
 ## Architecture
 
-Open-Audit follows a five-component architecture that processes blockchain data in real-time:
+Open-Audit supports two deployment architectures:
+
+### 🆕 Microservices Architecture (Recommended for Production)
+
+**Decoupled, scalable, fault-isolated system using Redis Pub/Sub:**
+
+```
+Stellar Network → Indexer Worker → Redis Pub/Sub → Web Server → WebSocket Clients
+```
+
+**Benefits:**
+- ✅ Zero CPU starvation (indexer runs in separate process)
+- ✅ Independent horizontal scaling
+- ✅ Fault isolation (crashes don't affect other services)
+- ✅ Auto-reconnect and message queuing
+- ✅ Zero-downtime deployments
+
+**Quick Start:**
+```bash
+# Option 1: Docker Compose (Easiest)
+npm run docker:up
+
+# Option 2: PM2 Process Manager
+npm run start:pm2
+
+# Option 3: Manual
+Terminal 1: redis-server
+Terminal 2: npm run dev:decoupled
+Terminal 3: npm run worker:indexer
+```
+
+📚 **Documentation:**
+- **[Quick Start Guide](QUICKSTART_MICROSERVICES.md)** - Get running in 5 minutes
+- **[Architecture Details](MICROSERVICES_ARCHITECTURE.md)** - Complete technical documentation
+- **[Testing Guide](MICROSERVICES_TESTING_GUIDE.md)** - Comprehensive testing walkthrough
+
+### Legacy Monolithic Architecture
+
+**Single-process system (for simple deployments):**
 
 ```
 Stellar Network → Event Indexer → Translation Engine → WebSocket Server → Frontend Dashboard
 ```
+
+⚠️ **Known limitations:** Under heavy load, indexing can starve the HTTP/WebSocket server of CPU cycles. See deprecation notice in `server.ts`.
+
+```bash
+npm run dev:ws
+```
+
+---
 
 For new contributors wanting to understand the system's data flow and internal architecture, see the comprehensive [**ARCHITECTURE.md**](ARCHITECTURE.md) guide which includes:
 
@@ -105,10 +191,11 @@ For new contributors wanting to understand the system's data flow and internal a
 
 **Quick Overview:**
 
-1. **Event Indexer** (`lib/stellar/`) — Polls Stellar RPC with rate limit handling
+1. **Event Indexer** (`lib/stellar/`, `src/worker/`) — Polls Stellar RPC with resilient rate limiting
 2. **Translation Engine** (`lib/translator/`) — Converts XDR to human-readable text
-3. **WebSocket Server** (`server.ts`) — Broadcasts events in real-time
-4. **Frontend Dashboard** (`app/dashboard/`, `components/`) — Interactive UI
+3. **Redis Pub/Sub** (microservices only) — Message broker for event distribution
+4. **WebSocket Server** (`server-decoupled.ts` or `server.ts`) — Broadcasts events in real-time
+5. **Frontend Dashboard** (`app/dashboard/`, `components/`) — Interactive UI
 
 ---
 
@@ -118,6 +205,7 @@ For new contributors wanting to understand the system's data flow and internal a
 open-audit/
 ├── app/                    # Next.js App Router pages
 │   ├── dashboard/          # Main dashboard page
+│   ├── api/                # API routes (health checks, etc.)
 │   ├── layout.tsx          # Root layout with theme provider
 │   └── page.tsx            # Landing / redirect
 ├── components/             # Reusable UI components
@@ -132,12 +220,30 @@ open-audit/
 │   ├── stellar/            # Stellar SDK helpers
 │   │   ├── indexer.ts      # Event polling with rate limit handling
 │   │   └── client.ts       # RPC client configuration
+│   ├── resilience/         # ⚡ Rate limiting & circuit breaker
+│   │   ├── token-bucket.ts # Token bucket rate limiter
+│   │   ├── circuit-breaker.ts # Circuit breaker pattern
+│   │   └── resilient-client.ts # Resilient RPC client wrapper
 │   ├── hooks/              # React hooks for live data
 │   └── utils.ts            # Shared utilities
+├── src/
+│   └── worker/             # 🆕 Microservices architecture
+│       └── indexer.ts      # Standalone indexer worker
+├── scripts/
+│   ├── lint-registry.ts    # Translation registry validation
+│   └── test-websocket-client.js # WebSocket testing tool
 ├── docs/
 │   └── good-first-issues.json
-├── server.ts               # Custom Next.js + WebSocket server
+├── server.ts               # Legacy monolithic server (deprecated)
+├── server-decoupled.ts     # 🆕 Microservices web server
+├── ecosystem.config.js     # 🆕 PM2 configuration
+├── docker-compose.microservices.yml # 🆕 Docker Compose config
+├── Dockerfile.worker       # 🆕 Indexer worker Docker image
+├── Dockerfile.web          # 🆕 Web server Docker image
 ├── ARCHITECTURE.md         # 📖 Detailed architecture guide
+├── MICROSERVICES_ARCHITECTURE.md # 🆕 Microservices documentation
+├── QUICKSTART_MICROSERVICES.md   # 🆕 Quick start guide
+├── MICROSERVICES_TESTING_GUIDE.md # 🆕 Testing guide
 └── public/
 ```
 

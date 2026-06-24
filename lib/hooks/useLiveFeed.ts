@@ -28,6 +28,7 @@ export function useLiveFeed(onEvent: (event: TranslatedEvent) => void): LiveFeed
   const pauseBufferRef = useRef<TranslatedEvent[]>([]);
   const isPausedRef = useRef(false);
   const onEventRef = useRef(onEvent);
+  const timeoutIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   onEventRef.current = onEvent;
 
   const connect = useCallback(() => {
@@ -47,13 +48,15 @@ export function useLiveFeed(onEvent: (event: TranslatedEvent) => void): LiveFeed
       onEventRef.current(event);
       setNewEventIds((prev) => new Set(prev).add(event.raw.id));
       // Remove highlight after animation completes (600 ms).
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         setNewEventIds((prev) => {
           const next = new Set(prev);
           next.delete(event.raw.id);
           return next;
         });
+        timeoutIdsRef.current.delete(timeoutId);
       }, 600);
+      timeoutIdsRef.current.add(timeoutId);
     };
 
     ws.onclose = () => {
@@ -65,6 +68,9 @@ export function useLiveFeed(onEvent: (event: TranslatedEvent) => void): LiveFeed
     wsRef.current?.close();
     wsRef.current = null;
     pauseBufferRef.current = [];
+    // Clear all pending timeouts to prevent memory leaks
+    timeoutIdsRef.current.forEach((timeoutId: ReturnType<typeof setTimeout>) => clearTimeout(timeoutId));
+    timeoutIdsRef.current.clear();
   }, []);
 
   const toggleLive = useCallback(() => {
@@ -90,13 +96,15 @@ export function useLiveFeed(onEvent: (event: TranslatedEvent) => void): LiveFeed
         for (const event of buffered) {
           onEventRef.current(event);
           setNewEventIds((ids) => new Set(ids).add(event.raw.id));
-          setTimeout(() => {
+          const timeoutId = setTimeout(() => {
             setNewEventIds((ids) => {
               const next = new Set(ids);
               next.delete(event.raw.id);
               return next;
             });
+            timeoutIdsRef.current.delete(timeoutId);
           }, 600);
+          timeoutIdsRef.current.add(timeoutId);
         }
       }
 

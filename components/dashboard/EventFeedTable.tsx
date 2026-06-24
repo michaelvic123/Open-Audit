@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RawDataDialog } from "./RawDataDialog";
+import { EventDetailsModal } from "./EventDetailsModal";
 import { ContributeDialog } from "./ContributeDialog";
 import { formatRelativeTime, truncateHex } from "@/lib/translator/decode";
 import type { TranslatedEvent, RawEvent } from "@/lib/translator/types";
@@ -69,11 +69,11 @@ export function EventFeedTable({
   isLoading = false,
   newEventIds = new Set(),
 }: EventFeedTableProps): React.JSX.Element {
-  const [rawDialogEvent, setRawDialogEvent] = useState<RawEvent | null>(null);
+  const [detailsEvent, setDetailsEvent] = useState<TranslatedEvent | null>(null);
   const [contributeDialogEvent, setContributeDialogEvent] = useState<RawEvent | null>(null);
 
-  function handleViewRaw(event: RawEvent): void {
-    setRawDialogEvent(event);
+  function handleViewDetails(event: TranslatedEvent): void {
+    setDetailsEvent(event);
   }
 
   function handleContribute(event: RawEvent): void {
@@ -155,11 +155,11 @@ export function EventFeedTable({
                             size="sm"
                             className="h-8 px-2 text-xs"
                             onClick={function () {
-                              handleViewRaw(event.raw);
+                              handleViewDetails(event);
                             }}
                           >
                             <Eye className="h-3.5 w-3.5 mr-1" />
-                            View Raw
+                            View Details
                           </Button>
 
                           {!isTranslated && (
@@ -192,11 +192,11 @@ export function EventFeedTable({
         </Table>
       </div>
 
-      <RawDataDialog
-        event={rawDialogEvent}
-        open={rawDialogEvent !== null}
+      <EventDetailsModal
+        event={detailsEvent}
+        open={detailsEvent !== null}
         onOpenChange={function (open) {
-          if (!open) setRawDialogEvent(null);
+          if (!open) setDetailsEvent(null);
         }}
       />
 

@@ -1,0 +1,68 @@
+[
+  {
+    "id": "GFI-001",
+    "title": "Implement Wallet Disconnect Logic",
+    "complexity": "low",
+    "labels": ["good first issue", "feature", "wallet"],
+    "description": "The app currently has a 'Connect Wallet' button in the header that shows a connected state, but there is no logic to actually disconnect the wallet. Implement the disconnect handler so that clicking 'Disconnect' in the wallet dropdown clears the wallet address from context and resets the UI to the disconnected state.",
+    "files_to_modify": [
+      "components/dashboard/WalletButton.tsx",
+      "lib/context/WalletContext.tsx"
+    ],
+    "acceptance_criteria": [
+      "Clicking 'Disconnect Wallet' clears the wallet address from WalletContext.",
+      "The header reverts to showing the 'Connect Wallet' button after disconnect.",
+      "No page reload is required — state updates reactively.",
+      "All functions use standard function declarations (no arrow functions)."
+    ],
+    "estimated_hours": 2,
+    "mentorship_available": true,
+    "stellar_drips_eligible": true
+  },
+  {
+    "id": "GFI-002",
+    "title": "Fix Header Layout on Mobile (Responsive Breakpoints)",
+    "complexity": "low",
+    "labels": ["good first issue", "bug", "ui", "responsive"],
+    "description": "On screens narrower than 640px (sm breakpoint), the header navigation items overflow horizontally and the logo text wraps awkwardly. The wallet button also overlaps the search icon. Fix the header component to stack gracefully on mobile: hide the nav links behind a hamburger menu and ensure the logo and wallet button sit cleanly on one row.",
+    "files_to_modify": [
+      "components/dashboard/Header.tsx"
+    ],
+    "acceptance_criteria": [
+      "On screens < 640px, nav links are hidden and a hamburger icon is shown.",
+      "Clicking the hamburger opens a vertical dropdown of nav links.",
+      "Logo and wallet button remain on a single row at all breakpoints.",
+      "No horizontal scroll appears on any screen width from 320px to 1440px.",
+      "Tailwind utility classes are used — no custom CSS files."
+    ],
+    "estimated_hours": 3,
+    "mentorship_available": true,
+    "stellar_drips_eligible": true
+  },
+  {
+    "id": "GFI-003",
+    "title": "Write Translation Blueprint for Soroswap 'Swap' Event",
+    "complexity": "low",
+    "labels": ["good first issue", "translation", "soroswap", "core"],
+    "description": "Soroswap is the primary DEX on Stellar/Soroban. Its swap events are currently displayed as 'Cryptic' in the Open-Audit feed. Create a translation blueprint for the Soroswap Router contract's 'swap' event so it renders as a human-readable sentence like: 'Public Key [G...] swapped 50 XLM for 48.2 USDC via Soroswap'. The Soroswap contract ABI and event schema are publicly available at https://github.com/soroswap/core.",
+    "files_to_modify": [
+      "lib/translator/blueprints/soroswap-router.ts",
+      "lib/translator/registry.ts"
+    ],
+    "acceptance_criteria": [
+      "A new file lib/translator/blueprints/soroswap-router.ts is created.",
+      "The blueprint exports a createSoroswapRouterBlueprint() function using standard function declaration syntax.",
+      "The translate() function handles the 'swap' event topic and returns a human-readable string.",
+      "The blueprint is registered in registry.ts.",
+      "A test file lib/translator/__tests__/soroswap-router.test.ts is added with at least one passing test using a real or realistic mock event.",
+      "No any types are used."
+    ],
+    "estimated_hours": 4,
+    "mentorship_available": true,
+    "stellar_drips_eligible": true,
+    "resources": [
+      "https://github.com/soroswap/core",
+      "https://developers.stellar.org/docs/smart-contracts/events"
+    ]
+  }
+]

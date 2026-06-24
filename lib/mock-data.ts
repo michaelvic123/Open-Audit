@@ -1,0 +1,165 @@
+/**
+ * Mock data for Open-Audit development and demonstration.
+ *
+ * This file provides realistic-looking Soroban contract events
+ * that demonstrate the translation system in action.
+ * Replace with real Stellar network calls in production.
+ */
+
+import type { RawEvent } from "./translator/types";
+
+const NOW = Math.floor(Date.now() / 1000);
+
+/** Mock raw events — a mix of translatable and cryptic events. */
+export const MOCK_RAW_EVENTS: RawEvent[] = [
+  // ── Translated: SAC USDC Transfer ──────────────────────────────────────────
+  {
+    id: "0000001-0",
+    contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+    topics: [
+      "0x0000000000000000000000000000000000000000000000000000000074726e73", // "transfer"
+      "0x000000000000000000000000GABC1234AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA00", // from
+      "0x000000000000000000000000GXYZ5678BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB00", // to
+    ],
+    data: "0x00000000000000000000000000000000000000000005F5E100", // 100 USDC (in stroops)
+    ledger: 52_341_001,
+    timestamp: NOW - 45,
+    txHash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  },
+
+  // ── Translated: SAC XLM Transfer ───────────────────────────────────────────
+  {
+    id: "0000001-1",
+    contractId: "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    topics: [
+      "0x0000000000000000000000000000000000000000000000000000000074726e73", // "transfer"
+      "0x000000000000000000000000GDEF9012CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC00",
+      "0x000000000000000000000000GHIJ3456DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD00",
+    ],
+    data: "0x000000000000000000000000000000000000000002FAF080", // 50 XLM
+    ledger: 52_341_002,
+    timestamp: NOW - 120,
+    txHash: "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+  },
+
+  // ── Cryptic: Unknown contract (no blueprint) ───────────────────────────────
+  {
+    id: "0000001-2",
+    contractId: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+    topics: [
+      "0xdeadbeef00000000000000000000000000000000000000000000000000000001",
+      "0xdeadbeef00000000000000000000000000000000000000000000000000000002",
+    ],
+    data: "0xdeadbeef000000000000000000000000000000000000000000000000000000ff",
+    ledger: 52_341_003,
+    timestamp: NOW - 200,
+    txHash: "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+  },
+
+  // ── Translated: SAC USDC Mint ──────────────────────────────────────────────
+  {
+    id: "0000001-3",
+    contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+    topics: [
+      "0x000000000000000000000000000000000000000000000000000000006d696e74", // "mint"
+      "0x000000000000000000000000GADMIN00EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE00",
+      "0x000000000000000000000000GKLM7890FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00",
+    ],
+    data: "0x0000000000000000000000000000000000000000017D7840", // 250 USDC
+    ledger: 52_341_004,
+    timestamp: NOW - 310,
+    txHash: "d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5",
+  },
+
+  // ── Cryptic: Soroswap Router (no blueprint yet — GFI-003) ──────────────────
+  {
+    id: "0000001-4",
+    contractId: "CDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+    topics: [
+      "0x000000000000000000000000000000000000000000000000000000007377617073", // "swap"
+      "0x000000000000000000000000GNOP1122GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG00",
+    ],
+    data: "0x000000000000000000000000000000000000000000000000000000000000ABCD",
+    ledger: 52_341_005,
+    timestamp: NOW - 450,
+    txHash: "e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6",
+  },
+
+  // ── Translated: SAC XLM Burn ───────────────────────────────────────────────
+  {
+    id: "0000001-5",
+    contractId: "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    topics: [
+      "0x000000000000000000000000000000000000000000000000000000006275726e", // "burn"
+      "0x000000000000000000000000GQRS3344HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH00",
+    ],
+    data: "0x00000000000000000000000000000000000000000017D784", // 25 XLM
+    ledger: 52_341_006,
+    timestamp: NOW - 600,
+    txHash: "f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1",
+  },
+
+  // ── Cryptic: Blend Protocol (no blueprint yet) ─────────────────────────────
+  {
+    id: "0000001-6",
+    contractId: "CEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+    topics: [
+      "0x000000000000000000000000000000000000000000000000000000006c656e64", // "lend"
+      "0x000000000000000000000000GTUV5566IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII00",
+    ],
+    data: "0x000000000000000000000000000000000000000000000000000000000000BEEF",
+    ledger: 52_341_007,
+    timestamp: NOW - 720,
+    txHash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b3",
+  },
+
+  // ── Translated: SAC USDC Transfer (large amount) ──────────────────────────
+  {
+    id: "0000001-7",
+    contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+    topics: [
+      "0x0000000000000000000000000000000000000000000000000000000074726e73",
+      "0x000000000000000000000000GWXY7788JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ00",
+      "0x000000000000000000000000GZAB9900KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK00",
+    ],
+    data: "0x000000000000000000000000000000000000000077359400", // 2000 USDC
+    ledger: 52_341_008,
+    timestamp: NOW - 900,
+    txHash: "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c4",
+  },
+
+  // ── Cryptic: Phoenix DEX (no blueprint yet) ────────────────────────────────
+  {
+    id: "0000001-8",
+    contractId: "CFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+    topics: [
+      "0x000000000000000000000000000000000000000000000000000000006c697175",
+      "0x000000000000000000000000GCDE1234LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL00",
+    ],
+    data: "0x000000000000000000000000000000000000000000000000000000000000CAFE",
+    ledger: 52_341_009,
+    timestamp: NOW - 1100,
+    txHash: "c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d5",
+  },
+
+  // ── Translated: SAC XLM Transfer ──────────────────────────────────────────
+  {
+    id: "0000001-9",
+    contractId: "CBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    topics: [
+      "0x0000000000000000000000000000000000000000000000000000000074726e73",
+      "0x000000000000000000000000GFGH5678MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM00",
+      "0x000000000000000000000000GIJK9012NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN00",
+    ],
+    data: "0x0000000000000000000000000000000000000000009896800", // 10 XLM
+    ledger: 52_341_010,
+    timestamp: NOW - 1350,
+    txHash: "d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e6",
+  },
+];
+
+/** A subset of events for a specific contract search demo. */
+export function getMockEventsForContract(contractId: string): RawEvent[] {
+  const filtered = MOCK_RAW_EVENTS.filter((e) => e.contractId === contractId);
+  return filtered.length > 0 ? filtered : MOCK_RAW_EVENTS.slice(0, 5);
+}

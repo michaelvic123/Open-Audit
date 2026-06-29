@@ -128,7 +128,7 @@
     "typescript": "^5",
     "until-async": "^3.0.2",
     "util-deprecate": "^1.0.2",
-    "vitest": "^4.1.9",
+    "vitest": "^3.2.6",
     "vitest-axe": "^0.1.0",
     "ws": "^8.18.0"
   },
